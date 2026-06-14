@@ -4,44 +4,86 @@
 #include<string>
 #include<condition_variable>
 #include<queue>
+#include<vector>
+#include<functional>
 
-std::queue<int> g_queue;
-std::condition_variable g_cv;
-std::mutex mtx;
+std::mutex cout_mtx;
 
-void Producer() {
-	for (int i = 0;i < 10;i++) {
+class ThreadPool {
+public:
+	ThreadPool(int numThreads) :stop(false) {
+		for (int i = 0;i < numThreads;i++) {
+			threads.emplace_back([this] {
+				while (1) {
+					std::unique_lock<std::mutex> lock(mtx);
+					condition.wait(lock, [this] {
+						return !tasks.empty()||stop;
+					});
+					if (stop && tasks.empty()) {
+						return;
+					}
+
+					std::function<void()> task(std::move(tasks.front()));
+					tasks.pop();
+					lock.unlock();
+					task();
+
+				}
+				});
+		}
+	}
+	~ThreadPool() {
 		{
 			std::unique_lock<std::mutex> lock(mtx);
-			g_queue.push(i);
-			//通知消费者有数据了
-			g_cv.notify_one();
-			std::cout << "Producer : " << i << std::endl;
+			stop = true;
 		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+		condition.notify_all();
+		for (auto& t : threads) {
+			t.join();
+		}
 	}
-}
-
-void Consumer() {
-	while (1) {
-		std::unique_lock<std::mutex> lock(mtx);
-
-		//如果队列为空，等待生产者生产数据
-		bool isempty = g_queue.empty();
-		g_cv.wait(lock, [](){
-			return !g_queue.empty();
-		});
-		int value = g_queue.front();
-		g_queue.pop();
-
-		std::cout << "Consumer : " << value << std::endl;
+	template<class F,class... Args>
+	void enqueue(F&& f, Args&&... args) {
+		std::function<void()>task=std::bind(std::forward<F>(f), std::forward<Args>(args)...);
+		{
+			std::unique_lock<std::mutex> lock(mtx);
+			tasks.emplace(std::move(task));
+		}
+		
+		condition.notify_one();
 	}
-}
+private:
+	std::vector<std::thread> threads;
+	std::queue<std::function<void()>> tasks;
+
+	std::mutex mtx;
+	std::condition_variable condition;
+
+	bool stop;
+
+};
+
 
 int main() {
-	std::thread t1(Producer);
-	std::thread t2(Consumer);
-	t1.join();
-	t2.join();
+	ThreadPool pool(4);
+
+	for (int i = 0;i < 10;i++) {
+		pool.enqueue([i] {
+			// 打印加锁，解决输出错乱
+			std::lock_guard<std::mutex> lk(cout_mtx);
+			std::cout << "Task " << i << " is running\n";
+			});
+
+		// 模拟任务耗时
+		std::this_thread::sleep_for(std::chrono::seconds(1));
+
+		pool.enqueue([i] {
+			std::lock_guard<std::mutex> lk(cout_mtx);
+			std::cout << "Task " << i << " is done\n";
+			});
+	}
+	
 	return 0;
+
+
 }
