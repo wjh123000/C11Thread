@@ -2,25 +2,35 @@
 #include<thread>
 #include<mutex>
 
-int a = 0;
-std::mutex mtx;
+std::mutex m1,m2;
 
-void func() {
-	for (int i = 0;i < 10000;i++) {
-		mtx.lock();
-		a++;
-		mtx.unlock();
+void func_1() {
+	for (int i = 1;i <= 50;i++) {
+		m1.lock();
+		m2.lock();
+		m1.unlock();
+		m2.unlock();
 	}
+	
+}
+
+void func_2() {
+	for (int i = 1;i <= 50;i++) {
+		m1.lock();
+		m2.lock();
+		m1.unlock();
+		m2.unlock();
+	}
+	
 }
 
 int main() {
-	std::thread t1(func);
-	std::thread t2(func);
-
+	std::thread t1(func_1);
+	std::thread t2(func_2);
 	t1.join();
 	t2.join();
 
-	std::cout << a << std::endl;
+	std::cout << "over" << std::endl;
 
 	return 0;
 }
