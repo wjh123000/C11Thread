@@ -1,35 +1,33 @@
 #include<iostream>
 #include<thread>
 #include<mutex>
+#include<string>
 
-int a = 0;
-std::timed_mutex mtx;
+class Log {
+public:
+	Log() {};
+	Log(const Log& log) = delete;
+	Log& operator=(const Log& log) = delete;
 
-void func() {
-	for (int i = 0;i < 2;i++) {
-		//std::unique_lock<std::mutex> lg(mtx);
+	//static Log instance;//饿汉模式
 
-		//std::unique_lock<std::mutex> lg(mtx, std::defer_lock);//构造函数什么都不做，加锁需要手动调用，可以自动unlock
-		//lg.lock();
+	static Log& GetInstance() {
+		//static Log log; //懒汉模式
+		//return log;
+		static Log* log = nullptr;
+		if (!log) log = new Log;
+		return *log;
+	}
 
-		std::unique_lock<std::timed_mutex> lg(mtx, std::defer_lock);
-		//lg.try_lock_for(std::chrono::seconds(5));//尝试加锁，成功返回true，失败返回false
-		if (lg.try_lock_for(std::chrono::seconds(2))) {
-			std::this_thread::sleep_for(std::chrono::seconds(1));
-			a++;
-		}
-		
-		
-	} 
-}
+	void PrintLog(std::string msg) {
+		std::cout <<__TIME__<< msg << std::endl;
+	}
+};
+
 
 int main() {
-	std::thread t1(func);
-	std::thread t2(func);
-	t1.join();
-	t2.join();
 
-	std::cout << a << std::endl;
+	Log::GetInstance().PrintLog("error");
 
 	return 0;
 }
