@@ -2,32 +2,46 @@
 #include<thread>
 #include<mutex>
 #include<string>
+#include<condition_variable>
+#include<queue>
 
-class Log {
-public:
-	Log() {};
-	Log(const Log& log) = delete;
-	Log& operator=(const Log& log) = delete;
+std::queue<int> g_queue;
+std::condition_variable g_cv;
+std::mutex mtx;
 
-	//static Log instance;//饿汉模式
-
-	static Log& GetInstance() {
-		//static Log log; //懒汉模式
-		//return log;
-		static Log* log = nullptr;
-		if (!log) log = new Log;
-		return *log;
+void Producer() {
+	for (int i = 0;i < 10;i++) {
+		{
+			std::unique_lock<std::mutex> lock(mtx);
+			g_queue.push(i);
+			//通知消费者有数据了
+			g_cv.notify_one();
+			std::cout << "Producer : " << i << std::endl;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
 	}
+}
 
-	void PrintLog(std::string msg) {
-		std::cout <<__TIME__<< msg << std::endl;
+void Consumer() {
+	while (1) {
+		std::unique_lock<std::mutex> lock(mtx);
+
+		//如果队列为空，等待生产者生产数据
+		bool isempty = g_queue.empty();
+		g_cv.wait(lock, [](){
+			return !g_queue.empty();
+		});
+		int value = g_queue.front();
+		g_queue.pop();
+
+		std::cout << "Consumer : " << value << std::endl;
 	}
-};
-
+}
 
 int main() {
-
-	Log::GetInstance().PrintLog("error");
-
+	std::thread t1(Producer);
+	std::thread t2(Consumer);
+	t1.join();
+	t2.join();
 	return 0;
 }
